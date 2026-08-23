@@ -1,0 +1,19 @@
+[
+  {
+    "Id": "CloudJanitorFargateTarget",
+    "Arn": "arn:aws:ecs:eu-central-1:156845521087:cluster/cloud-governance-cluster",
+    "RoleArn": "arn:aws:iam::156845521087:role/CloudJanitorTaskRole",
+    "EcsParameters": {
+      "TaskDefinitionArn": "arn:aws:ecs:eu-central-1:156845521087:task-definition/cloud-janitor-task:1",
+      "TaskCount": 1,
+      "LaunchType": "FARGATE",
+      "NetworkConfiguration": {
+        "awsvpcConfiguration": {
+          "Subnets": ["subnet-0693070c6c5cff8c7"],
+          "SecurityGroups": ["sg-01dc3bea727c1f395"],
+          "AssignPublicIp": "ENABLED"
+        }
+      }
+    }
+  }
+]
