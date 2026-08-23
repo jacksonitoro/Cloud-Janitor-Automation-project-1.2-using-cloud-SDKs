@@ -1,0 +1,30 @@
+{
+  "family": "cloud-janitor-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::156845521087:role/CloudJanitorTaskRole",
+  "taskRoleArn": "arn:aws:iam::156845521087:role/CloudJanitorTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "cloud-janitor",
+      "image": "jaydaniel10/cloud-janitor:latest",
+      "essential": true,
+      "environment": [
+        {
+          "name": "AWS_REGION",
+          "value": "eu-central-1"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cloud-janitor",
+          "awslogs-region": "eu-central-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
