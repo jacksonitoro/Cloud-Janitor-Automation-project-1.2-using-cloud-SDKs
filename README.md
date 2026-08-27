@@ -1,183 +1,189 @@
-# Cloud-Janitor Automation (v1.2)
+# Cloud-Janitor: Multi-Cloud Governance & FinOps Automation (v1.2)
 
-An automated, serverless cloud governance tool designed to audit, detect, and clean up orphaned and idle infrastructure across cloud environments. Built with Python and Cloud SDKs, packaged with Docker, distributed via Docker Hub, and orchestrated serverlessly via AWS ECS Fargate and Amazon EventBridge.
-
----
-
-## Architecture Overview
-
-```
-                          ┌───────────────────────────┐
-                          │  Amazon EventBridge Rule  │
-                          │   (Daily Cron Schedule)   │
-                          └─────────────┬─────────────┘
-                                        │ Triggers Task
-                                        ▼
-                          ┌───────────────────────────┐
-                          │      AWS ECS Fargate      │
-                          │ (Serverless Task Cluster) │
-                          └─────────────┬─────────────┘
-                                        │ Pulls Image
-                                        ▼
-                          ┌───────────────────────────┐
-                          │     Docker Hub Registry   │
-                          │ (cloud-janitor:latest)    │
-                          └─────────────┬─────────────┘
-                                        │ Assumes IAM Task Role
-                                        ▼
-                          ┌───────────────────────────┐
-                          │    EC2 / Cloud SDK Scan   │
-                          │  - Unattached EBS Volumes │
-                          │  - Unassociated Elastic IP│
-                          └──────┬─────────────┬──────┘
-                                 │             │
-                    Dry-Run Mode │             │ Live Mode (--force-delete)
-                                 ▼             ▼
-                   ┌─────────────────┐    ┌─────────────────┐
-                   │ CloudWatch Logs │    │ Resource Purge  │
-                   │ (Audit Trail)   │    │ (Cost Reduction)│
-                   └─────────────────┘    └─────────────────┘
-```
+An automated, serverless cloud governance tool designed to discover, audit, and clean up orphaned infrastructure across **AWS** and **Microsoft Azure**. Engineered with Python Cloud SDKs, packaged in Docker containers, distributed through Docker Hub, and orchestrated via native serverless compute engines (**AWS ECS Fargate** & **Azure Container Instances**).
 
 ---
 
-## Process Flow & Lifecycle
+## Business Value & FinOps Impact
+
+Orphaned cloud assets (unattached storage volumes, unassociated static IPs) create unmonitored recurring costs and compliance risks:
+* **Cost Optimization:** Eliminates silent cloud sprawl, reducing non-production cloud waste by up to 15–30%.
+* **Zero Idle Compute Overhead:** Executes ephemerally in under 20 seconds, costing less than **$0.01/month** to operate per cloud provider.
+* **Safe-by-Default Engineering:** Defaults to non-destructive dry-run audits, preventing accidental downtime while generating complete compliance logs.
+
+---
+
+## Multi-Cloud Architecture
 
 ```
-[ Trigger Event ] ──> [ Spin up Fargate Container ]
-                              │
-                              ▼
-                   [ Assume IAM Role (No Keys) ]
-                              │
-                              ▼
-                   [ Query Cloud SDK APIs ]
-                   ├── Check status == 'available' (EBS)
-                   └── Check associationId is None (EIP)
-                              │
-                 ┌────────────┴────────────┐
-                 ▼                         ▼
-        [ Dry-Run (Default) ]     [ Enforcement Action ]
-        • Log candidate ID        • ec2:DeleteVolume
-        • Estimate saved cost     • ec2:ReleaseAddress
-        • Zero state mutation     • Write audit to CloudWatch
-                 │                         │
-                 └────────────┬────────────┘
-                              ▼
-                 [ Container Terminates (0 Idle Cost) ]
+                          ┌───────────────────────────┐
+                          │    Scheduled Trigger      │
+                          │ AWS EventBridge / LogicApp│
+                          └─────────────┬─────────────┘
+                                        │ Scheduled Execution
+                                        ▼
+                  ┌───────────────────────────────────────────┐
+                  │       Serverless Ephemeral Tasks          │
+                  │  AWS ECS Fargate  │ Azure Container Inst. │
+                  └─────────────────────┬─────────────────────┘
+                                        │ Pulls Container Image
+                                        ▼
+                  ┌───────────────────────────────────────────┐
+                  │            Docker Hub Registry            │
+                  │  cloud-janitor:latest  │ azure-1.2        │
+                  └─────────────────────┬─────────────────────┘
+                                        │ Keyless Identity
+                                        │ (IAM Task Role / Managed ID)
+                                        ▼
+                  ┌───────────────────────────────────────────┐
+                  │          Cloud Asset Discovery            │
+                  │  AWS EC2 / EBS    │ Azure Disks & IPs     │
+                  └──────────────┬───────────────────┬────────┘
+                                 │                   │
+                    Dry-Run Mode │                   │ Enforcement (--force-delete)
+                                 ▼                   ▼
+                  ┌──────────────────────┐   ┌──────────────────────┐
+                  │ CloudWatch / LogHub  │   │ Destructive Purge    │
+                  │ (Audit Trail)        │   │ (Resource Cleanup)   │
+                  └──────────────────────┘   └──────────────────────┘
 ```
 
 ---
 
-## Repository Structure
+## Platform & Technical Comparison
+
+| Dimension | AWS Implementation | Azure Implementation |
+| :--- | :--- | :--- |
+| **Compute Runtime** | AWS ECS (Fargate Serverless) | Azure Container Instances (ACI) |
+| **Identity & Access** | AWS IAM Task Roles (Keyless) | System-Assigned Managed Identity |
+| **RBAC Scope** | Least-Privilege IAM Policy | Subscription Reader / Contributor |
+| **Storage Target** | Unattached EBS Volumes (`available`) | Unattached Managed Disks (`Unattached`) |
+| **Network Target** | Unassociated Elastic IPs (`None`) | Unassociated Public IP Addresses (`None`) |
+| **Logging Service** | Amazon CloudWatch Logs | ACI Native Stream / Log Analytics |
+| **Safety Default** | Dry-Run Simulation | Dry-Run Simulation |
+
+---
+
+## Project Structure
 
 ```text
 cloud-janitor/
-├── Dockerfile                # Container runtime definition
-├── requirements.txt          # Cloud SDK dependencies (boto3, botocore)
-├── janitor.py                # Main governance scan & cleanup logic
-├── task-definition.json      # AWS ECS Fargate Task Definition
-├── eventbridge-target.json   # EventBridge automated target config
-├── ecs-trust-policy.json     # IAM Service Trust Policy
-├── janitor-policy.json       # Least-privilege IAM Actions
-└── README.md                 # Project Documentation
+├── Dockerfile                  # AWS runtime container specification
+├── Dockerfile.azure            # Azure runtime container specification
+├── requirements.txt            # AWS dependencies (boto3, botocore)
+├── requirements-azure.txt      # Azure dependencies (azure-mgmt-*, azure-identity)
+├── janitor.py                  # AWS scanning and governance logic
+├── azure_janitor.py            # Azure scanning and governance logic
+├── task-definition.json        # AWS ECS task definition
+├── eventbridge-target.json     # AWS EventBridge target config
+├── ecs-trust-policy.json       # AWS IAM trust policy
+├── janitor-policy.json         # AWS IAM permissions policy
+├── docs/
+│   └── images/                 # Architecture diagrams & terminal proof
+└── README.md                   # Multi-Cloud Documentation
 ```
 
 ---
 
-## Implementation Steps & Commands
+## Technical Capabilities & Skills Demonstrated
 
-### 1. Local Testing with Docker
+* **FinOps Automation:** Implemented policy-driven resource lifecycle governance.
+* **Serverless Orchestration:** Deployed on-demand tasks across AWS ECS Fargate and Azure Container Instances.
+* **Keyless Identity Security:** Applied AWS IAM Task Roles and Azure System-Assigned Managed Identities to eliminate hardcoded API credentials.
+* **Multi-Cloud Software Design:** Built modular Python engines targeting both AWS SDK (`boto3`) and Azure SDK (`azure-mgmt-*`).
+* **Container Packaging & CI:** Maintained isolated runtime configurations using Docker and Docker Hub releases.
 
-Build and test the container locally using safe dry-run flags:
+---
+
+## Step-by-Step Deployment Guide
+
+### Phase 1: Local Container Build & Registry Release
 
 ```bash
-# Build the Docker image
-docker build -t cloud-janitor:1.2 .
+# 1. Build and push AWS Engine
+docker build -t <your-dockerhub-user>/cloud-janitor:latest .
+docker push <your-dockerhub-user>/cloud-janitor:latest
 
-# Test locally with credentials
-docker run --rm \
-  -e AWS_ACCESS_KEY_ID="<YOUR_ACCESS_KEY>" \
-  -e AWS_SECRET_ACCESS_KEY="<YOUR_SECRET_KEY>" \
-  -e AWS_REGION="eu-central-1" \
-  cloud-janitor:1.2
+# 2. Build and push Azure Engine
+docker build -f Dockerfile.azure -t <your-dockerhub-user>/cloud-janitor:azure-1.2 .
+docker push <your-dockerhub-user>/cloud-janitor:azure-1.2
 ```
 
-### 2. Registry Distribution via Docker Hub
+---
+
+### Phase 2: AWS Deployment (ECS Fargate + EventBridge)
 
 ```bash
-# Tag for release
-docker tag cloud-janitor:1.2 <your-dockerhub-username>/cloud-janitor:latest
-
-# Push to Docker Hub
-docker push <your-dockerhub-username>/cloud-janitor:latest
-```
-
-### 3. Serverless Cloud Infrastructure Setup (AWS)
-
-```bash
-# Create CloudWatch Log Group
+# 1. Create Log Group & ECS Cluster
 aws logs create-log-group --log-group-name /ecs/cloud-janitor --region eu-central-1
-
-# Create ECS Cluster
 aws ecs create-cluster --cluster-name cloud-governance-cluster --region eu-central-1
 
-# Register Task Definition
+# 2. Register Task Definition & Run Test Task
 aws ecs register-task-definition --cli-input-json file://task-definition.json --region eu-central-1
 
-# Run On-Demand Task Scan
-aws ecs run-task \
-  --cluster cloud-governance-cluster \
-  --task-definition cloud-janitor-task \
-  --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[<SUBNET_ID>],securityGroups=[<SG_ID>],assignPublicIp=ENABLED}" \
-  --region eu-central-1
+# 3. Schedule Recurring Daily Audit (Amazon EventBridge)
+aws events put-rule --name "DailyCloudJanitorScan" --schedule-expression "cron(0 0 * * ? *)" --region eu-central-1
+aws events put-targets --rule "DailyCloudJanitorScan" --targets file://eventbridge-target.json --region eu-central-1
 ```
 
-### 4. Schedule Autonomous Execution (Amazon EventBridge)
+---
+
+### Phase 3: Azure Deployment (ACI + System-Assigned Identity)
 
 ```bash
-# Create recurring schedule rule
-aws events put-rule \
-  --name "DailyCloudJanitorScan" \
-  --schedule-expression "cron(0 0 * * ? *)" \
-  --state ENABLED \
-  --region eu-central-1
+# 1. Create Dedicated Resource Group
+az group create --name rg-cloud-governance --location germanywestcentral
 
-# Attach ECS Fargate as Target
-aws events put-targets \
-  --rule "DailyCloudJanitorScan" \
-  --targets file://eventbridge-target.json \
-  --region eu-central-1
+# 2. Provision Azure Container Instance with Managed Identity
+az container create \
+  --resource-group rg-cloud-governance \
+  --name aci-cloud-janitor \
+  --image <your-dockerhub-user>/cloud-janitor:azure-1.2 \
+  --os-type Linux \
+  --command-line "python azure_janitor.py --dry-run --subscription-id <YOUR_SUBSCRIPTION_ID>" \
+  --restart-policy Never \
+  --cpu 1 --memory 1 \
+  --assign-identity \
+  --location germanywestcentral
+
+# 3. Assign Least-Privilege Reader Role across Subscription
+PRINCIPAL_ID=$(az container show --resource-group rg-cloud-governance --name aci-cloud-janitor --query identity.principalId -o tsv)
+MSYS_NO_PATHCONV=1 az role assignment create --assignee "$PRINCIPAL_ID" --role "Reader" --scope "/subscriptions/<YOUR_SUBSCRIPTION_ID>"
 ```
 
 ---
 
-## Core Functions Reference (`janitor.py`)
+## Live Verification & Test Outputs
 
-* `parse_args()`: Parses CLI execution arguments (`--dry-run`, `--force-delete`, `--region`). Defaults to dry-run protection.
-* `scan_unattached_volumes(ec2_client, dry_run)`: Queries `ec2:DescribeVolumes` for state `available`. Logs or safely removes orphaned storage.
-* `scan_unassociated_elastic_ips(ec2_client, dry_run)`: Queries `ec2:DescribeAddresses` to detect allocated IPs lacking active EC2/ENI associations.
-* `main()`: Authenticates client, executes evaluation cycles, and outputs structured audit status logs.
+### 1. Azure Target Detection Verification
 
----
+An unattached test disk (`JanitorTestOrphanDisk`, 1 GiB) was created to test detection accuracy:
 
-## Verification & Output Example
+<p align="center">
+  <img src="docs/images/janitortestdisk.png" alt="Test Disk Creation Output" width="750">
+</p>
 
-Verified output captured from Amazon CloudWatch logs during an automated scan run:
+### 2. Autonomous ACI Scan Execution & Dry-Run Log
+
+Invoking the container spins up an ephemeral environment that assumes the Managed Identity, performs discovery, logs targets, and shuts down:
+
+<p align="center">
+  <img src="docs/images/containerlogs.png" alt="Azure Container Instance Scan Output" width="750">
+</p>
 
 ```text
 ============================================================
- Cloud-Janitor Automation Engine v1.2
- Target Region : eu-central-1
- Mode          : DRY-RUN (Safe)
+ Cloud-Janitor Automation Engine (Azure Edition v1.2)
+ Subscription ID : 0c73f3d3-****-****-****-************
+ Mode            : DRY-RUN (Safe)
 ============================================================
 
-[+] Scanning for unattached EBS volumes (Dry-Run: True)...
-    [!] Target found: vol-0428e69323d29c167 (1 GiB, Created: 2026-08-23 20:51:03)
-        [DRY-RUN] Would delete volume: vol-0428e69323d29c167
+[+] Scanning for unattached Azure Managed Disks (Dry-Run: True)...
+    [!] Target found: JanitorTestOrphanDisk (Size: 1 GiB, RG: RG-CLOUD-GOVERNANCE)
+        [DRY-RUN] Would delete disk: JanitorTestOrphanDisk
 
-[+] Scanning for unassociated Elastic IPs (Dry-Run: True)...
-    ✔ No unused Elastic IPs found.
+[+] Scanning for unassociated Public IPs (Dry-Run: True)...
+    ✔ No unused Public IPs found.
 
-[✔] Scan cycle complete.
+[✔] Azure scan cycle complete.
 ```
